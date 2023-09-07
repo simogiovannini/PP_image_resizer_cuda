@@ -3,18 +3,22 @@
 #include <opencv2/highgui.hpp>
 #include <opencv2/cudaimgproc.hpp>
 #include <iostream>
+#include <stdio.h>
+#include <cmath>
+
 using namespace cv;
 using namespace std;
 
 void sequential_downscale(const Mat& image, int kernel_size);
-void cuda_downscale(Mat image);
+void cuda_downscale(const Mat& image, int kernel_size);
 void save_image(const Mat& image, const string& path);
 Vec3b compute_avg_pixel(const Mat& image, int kernel_size, int row_index, int col_index);
+__global__ void compute_avg_pixel_cuda(const uchar* gpu_img);
 
 int main()
 {
     Mat image;
-    image = imread("../mosaic.jpg", IMREAD_COLOR); // Read the file
+    image = imread("../4x4.png", IMREAD_COLOR);
     if(image.empty()) { // Check for invalid input
         cout << "Could not open or find the image" << std::endl ;
         return -1;
@@ -23,9 +27,10 @@ int main()
     cout << "Pixels: " << image.total() << endl;
     cout << image.rows << "x" << image.cols << endl;
 
-    int kernel_size = 16;
+    int kernel_size = 2;
 
     sequential_downscale(image, kernel_size);
+    cuda_downscale(image, kernel_size);
 
     return 0;
 }
@@ -73,4 +78,29 @@ Vec3b compute_avg_pixel(const Mat& image, int kernel_size, int row_index, int co
     avg[1] = (int) sumG / n_pixel_kernel;
     avg[2] = (int) sumR / n_pixel_kernel;
     return avg;
+}
+
+void cuda_downscale(const Mat& image, int kernel_size) {
+
+    std::vector<uchar> tmp_array;
+    tmp_array.assign(image.data, image.data + image.total()*image.channels());
+
+    uchar* gpu_img = nullptr;
+    cudaMalloc((void**)&gpu_img, image.total() * image.channels() * sizeof(uchar));
+    cudaMemcpy(gpu_img, tmp_array.data(), image.total() * image.channels() * sizeof(uchar), cudaMemcpyHostToDevice);
+
+    // uchar data[12] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
+    // cv::Mat new_img = cv::Mat(2, 2, CV_8UC3, &data);
+
+    int grid_dim = ceil((float) image.rows / 16);
+
+    dim3 block(16, 16, 3);
+    dim3 grid(grid_dim, grid_dim);
+
+    compute_avg_pixel_cuda<<<grid, block>>>(gpu_img);
+    cudaDeviceSynchronize();
+}
+
+__global__ void compute_avg_pixel_cuda(const uchar* gpu_img) {
+    printf("%d %d %d %d %d\n", blockIdx.x, blockIdx.y, threadIdx.x, threadIdx.y, threadIdx.z);
 }
