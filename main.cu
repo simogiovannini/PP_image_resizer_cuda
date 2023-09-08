@@ -13,7 +13,7 @@ void sequential_downscale(const Mat& image, int kernel_size);
 void cuda_downscale(const Mat& image, int kernel_size);
 void save_image(const Mat& image, const string& path);
 Vec3b compute_avg_pixel(const Mat& image, int kernel_size, int row_index, int col_index);
-__global__ void compute_avg_pixel_cuda(const uchar* gpu_img, const uchar* new_img);
+__global__ void compute_avg_pixel_cuda(const uchar* img, const uchar*, int kernel_size, int img_dim);
 
 int main()
 {
@@ -97,13 +97,22 @@ void cuda_downscale(const Mat& image, int kernel_size) {
     dim3 block(16, 16, 3);
     dim3 grid(grid_dim, grid_dim);
 
-    compute_avg_pixel_cuda<<<grid, block>>>(gpu_img, new_img);
+    compute_avg_pixel_cuda<<<grid, block>>>(gpu_img, new_img, kernel_size, image.rows);
     cudaDeviceSynchronize();
 
     cv::Mat downscaled_img = Mat(image.rows / kernel_size, image.cols / kernel_size, CV_8UC3, &new_img);
     save_image(downscaled_img, "../cuda_result.jpg");
 }
 
-__global__ void compute_avg_pixel_cuda(const uchar* gpu_img, const uchar* new_img) {
-    printf("%d %d %d %d %d\n", blockIdx.x, blockIdx.y, threadIdx.x, threadIdx.y, threadIdx.z);
+__global__ void compute_avg_pixel_cuda(const uchar* img, const uchar* res, int kernel_size, int img_dim) {
+    int res_dim = img_dim / kernel_size;
+    int i =  blockIdx.x * 16 + threadIdx.x;
+    int j =  blockIdx.y * 16 + threadIdx.y;
+    if(i < img_dim && j < img_dim) {
+        int new_i = i / kernel_size;
+        int new_j = j / kernel_size;
+        printf("%d %d %d -------> %d %d\n", i, j, threadIdx.z, new_i, new_j);
+        res[] =
+    }
+
 }
