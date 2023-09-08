@@ -5,6 +5,7 @@
 #include <iostream>
 #include <stdio.h>
 #include <cmath>
+#include <chrono>
 
 using namespace cv;
 using namespace std;
@@ -18,7 +19,7 @@ __global__ void compute_avg_pixel_cuda(const int* img, int* res, int kernel_size
 int main()
 {
     Mat image;
-    image = imread("../Lenna.png", IMREAD_COLOR);
+    image = imread("../mosaic.jpg", IMREAD_COLOR);
     if(image.empty()) { // Check for invalid input
         cout << "Could not open or find the image" << std::endl ;
         return -1;
@@ -29,8 +30,17 @@ int main()
 
     int kernel_size = 8;
 
+    auto beg = chrono::high_resolution_clock::now();
     sequential_downscale(image, kernel_size);
+    auto end = chrono::high_resolution_clock::now();
+    auto duration = chrono::duration_cast<chrono::microseconds>(end - beg);
+    cout << "Sequential Elapsed Time: " << duration.count() << endl;
+
+    beg = chrono::high_resolution_clock::now();
     cuda_downscale(image, kernel_size);
+    end = chrono::high_resolution_clock::now();
+    duration = chrono::duration_cast<chrono::microseconds>(end - beg);
+    cout << "CUDA Elapsed Time: " << duration.count() << endl;
 
     return 0;
 }
