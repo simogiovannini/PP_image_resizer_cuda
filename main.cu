@@ -18,7 +18,7 @@ __global__ void compute_avg_pixel_cuda(const int* img, int* res, int kernel_size
 int main()
 {
     Mat image;
-    image = imread("../4x4.png", IMREAD_COLOR);
+    image = imread("../Lenna.png", IMREAD_COLOR);
     if(image.empty()) { // Check for invalid input
         cout << "Could not open or find the image" << std::endl ;
         return -1;
@@ -27,7 +27,7 @@ int main()
     cout << "Pixels: " << image.total() << endl;
     cout << image.rows << "x" << image.cols << endl;
 
-    int kernel_size = 2;
+    int kernel_size = 8;
 
     sequential_downscale(image, kernel_size);
     cuda_downscale(image, kernel_size);
@@ -41,7 +41,7 @@ void sequential_downscale(const Mat& image, int kernel_size) {
 
     Mat img(rows / kernel_size, cols / kernel_size, CV_8UC3, Scalar(0,0, 0));
     int newImgRow = 0;
-    int newImgCol = 0;
+    int newImgCol;
 
     for(int i = 0; i < rows; i += kernel_size) {
         newImgRow++;
@@ -101,23 +101,18 @@ void cuda_downscale(const Mat& image, int kernel_size) {
     compute_avg_pixel_cuda<<<grid, block>>>(gpu_img, new_img, kernel_size, image.rows);
     cudaDeviceSynchronize();
 
-    cout << "cout" << image.total() * image.channels() / (kernel_size * kernel_size) << endl;
-
     int* cuda_img = (int*)malloc(image.total() * image.channels() / (kernel_size * kernel_size) * sizeof(int));
     cudaMemcpy(cuda_img, new_img, image.total() * image.channels() / (kernel_size * kernel_size) * sizeof(int), cudaMemcpyDeviceToHost);
 
-    for(int i=0; i<12;i++){
-        cout << cuda_img[i] << endl;
+    uchar res[image.total() * image.channels() / (kernel_size * kernel_size)];
+
+    for(int i = 0; i < image.total() * image.channels() / (kernel_size * kernel_size); i += 1) {
+        res[i] = cuda_img[i];
     }
 
-    cv::Mat downscaled_img = Mat(image.rows / kernel_size, image.cols / kernel_size, CV_8UC3, cuda_img);
+    cv::Mat downscaled_img = Mat(image.rows / kernel_size, image.cols / kernel_size, CV_8UC3, &res);
     save_image(downscaled_img, "../cuda_result.jpg");
 
-    for(int i = 0; i < downscaled_img.rows; i += 1) {
-        for(int j = 0; j < downscaled_img.cols; j += 1) {
-            cout << downscaled_img.at<Vec3b>(Point(i, j)) << endl;
-        }
-    }
 
 }
 
@@ -128,11 +123,7 @@ __global__ void compute_avg_pixel_cuda(const int* img, int* res, int kernel_size
     if(i < img_dim && j < img_dim) {
         int new_i = i / kernel_size;
         int new_j = j / kernel_size;
-        // printf("%d %d %d -------> %d %d ------------ %d %d ------------ %d\n", i, j, threadIdx.z, new_i, new_j, new_j * res_dim * 3 + new_i * 3 + threadIdx.z, j * img_dim * 3 + i * 3 + threadIdx.z, res[new_j * res_dim * 3 + new_i * 3 + threadIdx.z]);
-        int pre = res[new_j * res_dim * 3 + new_i * 3 + threadIdx.z];
         int add_val = (img[j * img_dim * 3 + i * 3 + threadIdx.z] / (kernel_size * kernel_size));
         atomicAdd(&res[new_j * res_dim * 3 + new_i * 3 + threadIdx.z], add_val);
-        int post = res[new_j * res_dim * 3 + new_i * 3 + threadIdx.z];
-        printf("%d %d %d\n", pre, add_val, post);
     }
 }
