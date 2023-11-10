@@ -1,11 +1,10 @@
 #include <opencv2/core.hpp>
 #include <opencv2/imgcodecs.hpp>
-#include <opencv2/highgui.hpp>
 #include <opencv2/cudaimgproc.hpp>
 #include <iostream>
-#include <stdio.h>
 #include <cmath>
 #include <chrono>
+#include <map>
 
 using namespace cv;
 using namespace std;
@@ -17,8 +16,22 @@ Vec3b compute_avg_pixel(const Mat& image, int kernel_size, int row_index, int co
 __global__ void compute_avg_pixel_cuda(const int *img, float *res, int kernel_size, int block_dim, int img_dim);
 
 int main() {
+    std::chrono::high_resolution_clock::time_point beg, end;
+    long long int duration;
+
     String file_names[] = {"owl.jpeg", "lamborghini.jpg", "mosaic.jpg", "the_last_of_us.jpg", "mushroom.jpg"};
+    //String file_names[] = {"owl.jpeg", "lamborghini.jpg", "mosaic.jpg", "the_last_of_us.jpg", "mushroom.jpg"};
+
     int kernel_sizes[] = {4, 8, 16, 32, 64};
+
+    long long int seq_times[sizeof(kernel_sizes)], par_times[sizeof(kernel_sizes)];
+
+    int n_kernel_sizes = sizeof(kernel_sizes) / sizeof(kernel_sizes)[0];
+
+    for(int i = 0; i < n_kernel_sizes; i++) {
+        seq_times[i] = 0;
+        par_times[i] = 0;
+    }
 
     for(const auto& file_name : file_names) {
         Mat image;
@@ -29,22 +42,28 @@ int main() {
             return -1;
         }
 
-        cout << "Pixels: " << image.total() << endl;
-        cout << image.rows << "x" << image.cols << endl;
+        cout << file_name << ": " << image.rows << "x" << image.cols << endl;
 
-        for(auto kernel_size : kernel_sizes){
-            auto beg = chrono::high_resolution_clock::now();
+        for(int i = 0; i < n_kernel_sizes; i++) {
+            int kernel_size = kernel_sizes[i];
+            beg = chrono::high_resolution_clock::now();
             sequential_downscale(image, file_name, kernel_size);
-            auto end = chrono::high_resolution_clock::now();
-            auto duration = chrono::duration_cast<chrono::microseconds>(end - beg);
-            cout << "Sequential Elapsed Time: " << duration.count() << endl;
+            end = chrono::high_resolution_clock::now();
+            duration = chrono::duration_cast<std::chrono::milliseconds>(end - beg).count();
+            seq_times[i] += duration;
 
             beg = chrono::high_resolution_clock::now();
             cuda_downscale(image, file_name, kernel_size);
             end = chrono::high_resolution_clock::now();
-            duration = chrono::duration_cast<chrono::microseconds>(end - beg);
-            cout << "CUDA Elapsed Time: " << duration.count() << endl;
+            duration = chrono::duration_cast<std::chrono::milliseconds>(end - beg).count();
+            par_times[i] += duration;
         }
+    }
+
+    for(int i = 0; i < n_kernel_sizes; i++){
+        cout << endl << "Kernel size: " << kernel_sizes[i] << endl;
+        cout << "Average elapsed time for sequential downscale: " << (float) seq_times[i] / n_kernel_sizes << endl;
+        cout << "Average elapsed time for parallelized downscale: " << (float) par_times[i] / n_kernel_sizes  << endl;
     }
 
     return 0;
