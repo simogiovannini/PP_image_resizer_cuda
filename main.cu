@@ -19,8 +19,9 @@ int main() {
     std::chrono::high_resolution_clock::time_point beg, end;
     long long int duration;
 
+    // first file name set is for 4096x4096 images, the second is for 1024x1024 images
     String file_names[] = {"owl.jpeg", "lamborghini.jpg", "mosaic.jpg", "the_last_of_us.jpg", "mushroom.jpg"};
-    //String file_names[] = {"owl.jpeg", "lamborghini.jpg", "mosaic.jpg", "the_last_of_us.jpg", "mushroom.jpg"};
+    // String file_names[] = {"blue_dragon.jpg", "flower.jpg", "purple_circle.jpg", "rainbow.jpg", "ying_yang.jpg"};
 
     int kernel_sizes[] = {4, 8, 16, 32, 64};
 
