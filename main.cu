@@ -14,12 +14,11 @@ void sequential_downscale(const Mat& image, const string& image_name, int kernel
 void cuda_downscale(const Mat& image, const string& image_name, int kernel_size);
 void save_image(const Mat& image, const string& path);
 Vec3b compute_avg_pixel(const Mat& image, int kernel_size, int row_index, int col_index);
-__global__ void compute_avg_pixel_cuda(const int* img, int* res, int kernel_size, int img_dim);
+__global__ void compute_avg_pixel_cuda(const int *img, float *res, int kernel_size, int block_dim, int img_dim);
 
 int main() {
     String file_names[] = {"owl.jpeg", "lamborghini.jpg", "mosaic.jpg", "the_last_of_us.jpg", "mushroom.jpg"};
-
-    int kernel_sizes[] = {4, 8};
+    int kernel_sizes[] = {4, 8, 16, 32, 64};
 
     for(const auto& file_name : file_names) {
         Mat image;
@@ -106,20 +105,19 @@ void cuda_downscale(const Mat& image, const string& image_name, int kernel_size)
     cudaMalloc((void**)&gpu_img, image.total() * image.channels() * sizeof(int));
     cudaMemcpy(gpu_img, tmp_array.data(), image.total() * image.channels() * sizeof(int), cudaMemcpyHostToDevice);
 
-    int* new_img = nullptr;
-    cudaMalloc((void**)&new_img, image.total() * image.channels() / (kernel_size * kernel_size) * sizeof(int));
-    cudaMemset(new_img, 0, image.total() * image.channels() / (kernel_size * kernel_size) * sizeof(int));
+    float* new_img = nullptr;
+    cudaMalloc((void**)&new_img, image.total() * image.channels() / (kernel_size * kernel_size) * sizeof(float));
+    cudaMemset(new_img, 0, image.total() * image.channels() / (kernel_size * kernel_size) * sizeof(float));
 
-    int grid_dim = ceil((float) image.rows / 16);
-
-    dim3 block(16, 16, 3);
+    int block_dim = 16;
+    int grid_dim = ceil((float) image.rows / block_dim);
+    dim3 block(block_dim, block_dim, 3);
     dim3 grid(grid_dim, grid_dim);
-
-    compute_avg_pixel_cuda<<<grid, block>>>(gpu_img, new_img, kernel_size, image.rows);
+    compute_avg_pixel_cuda<<<grid, block>>>(gpu_img, new_img, kernel_size, block_dim, image.rows);
     cudaDeviceSynchronize();
 
-    int* cuda_img = (int*)malloc(image.total() * image.channels() / (kernel_size * kernel_size) * sizeof(int));
-    cudaMemcpy(cuda_img, new_img, image.total() * image.channels() / (kernel_size * kernel_size) * sizeof(int), cudaMemcpyDeviceToHost);
+    float* cuda_img = (float*)malloc(image.total() * image.channels() / (kernel_size * kernel_size) * sizeof(float));
+    cudaMemcpy(cuda_img, new_img, image.total() * image.channels() / (kernel_size * kernel_size) * sizeof(float), cudaMemcpyDeviceToHost);
 
     uchar res[image.total() * image.channels() / (kernel_size * kernel_size)];
 
@@ -133,14 +131,15 @@ void cuda_downscale(const Mat& image, const string& image_name, int kernel_size)
     save_image(downscaled_img, save_path);
 }
 
-__global__ void compute_avg_pixel_cuda(const int* img, int* res, int kernel_size, int img_dim) {
+__global__ void compute_avg_pixel_cuda(const int *img, float *res, int kernel_size, int block_dim, int img_dim) {
     int res_dim = img_dim / kernel_size;
-    int i =  blockIdx.x * 16 + threadIdx.x;
-    int j =  blockIdx.y * 16 + threadIdx.y;
+    int i =  blockIdx.x * block_dim + threadIdx.x;
+    int j =  blockIdx.y * block_dim + threadIdx.y;
     if(i < img_dim && j < img_dim) {
         int new_i = i / kernel_size;
         int new_j = j / kernel_size;
-        int add_val = (img[j * img_dim * 3 + i * 3 + threadIdx.z] / (kernel_size * kernel_size));
+        float pixel_val = img[j * img_dim * 3 + i * 3 + threadIdx.z];
+        float add_val = pixel_val / (float) (kernel_size * kernel_size);
         atomicAdd(&res[new_j * res_dim * 3 + new_i * 3 + threadIdx.z], add_val);
     }
 }
