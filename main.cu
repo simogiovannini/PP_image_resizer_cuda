@@ -10,42 +10,48 @@
 using namespace cv;
 using namespace std;
 
-void sequential_downscale(const Mat& image, int kernel_size);
-void cuda_downscale(const Mat& image, int kernel_size);
+void sequential_downscale(const Mat& image, const string& image_name, int kernel_size);
+void cuda_downscale(const Mat& image, const string& image_name, int kernel_size);
 void save_image(const Mat& image, const string& path);
 Vec3b compute_avg_pixel(const Mat& image, int kernel_size, int row_index, int col_index);
 __global__ void compute_avg_pixel_cuda(const int* img, int* res, int kernel_size, int img_dim);
 
-int main()
-{
-    Mat image;
-    image = imread("../mosaic.jpg", IMREAD_COLOR);
-    if(image.empty()) { // Check for invalid input
-        cout << "Could not open or find the image" << std::endl ;
-        return -1;
+int main() {
+    String file_names[] = {"owl.jpeg", "lamborghini.jpg", "mosaic.jpg", "the_last_of_us.jpg", "mushroom.jpg"};
+
+    int kernel_sizes[] = {4, 8};
+
+    for(const auto& file_name : file_names) {
+        Mat image;
+        String image_path = "../dataset/" + file_name;
+        image = imread(image_path, IMREAD_COLOR);
+        if(image.empty()) {
+            cout << "Could not open or find the image" << std::endl ;
+            return -1;
+        }
+
+        cout << "Pixels: " << image.total() << endl;
+        cout << image.rows << "x" << image.cols << endl;
+
+        for(auto kernel_size : kernel_sizes){
+            auto beg = chrono::high_resolution_clock::now();
+            sequential_downscale(image, file_name, kernel_size);
+            auto end = chrono::high_resolution_clock::now();
+            auto duration = chrono::duration_cast<chrono::microseconds>(end - beg);
+            cout << "Sequential Elapsed Time: " << duration.count() << endl;
+
+            beg = chrono::high_resolution_clock::now();
+            cuda_downscale(image, file_name, kernel_size);
+            end = chrono::high_resolution_clock::now();
+            duration = chrono::duration_cast<chrono::microseconds>(end - beg);
+            cout << "CUDA Elapsed Time: " << duration.count() << endl;
+        }
     }
-
-    cout << "Pixels: " << image.total() << endl;
-    cout << image.rows << "x" << image.cols << endl;
-
-    int kernel_size = 8;
-
-    auto beg = chrono::high_resolution_clock::now();
-    sequential_downscale(image, kernel_size);
-    auto end = chrono::high_resolution_clock::now();
-    auto duration = chrono::duration_cast<chrono::microseconds>(end - beg);
-    cout << "Sequential Elapsed Time: " << duration.count() << endl;
-
-    beg = chrono::high_resolution_clock::now();
-    cuda_downscale(image, kernel_size);
-    end = chrono::high_resolution_clock::now();
-    duration = chrono::duration_cast<chrono::microseconds>(end - beg);
-    cout << "CUDA Elapsed Time: " << duration.count() << endl;
 
     return 0;
 }
 
-void sequential_downscale(const Mat& image, int kernel_size) {
+void sequential_downscale(const Mat& image, const string& image_name, int kernel_size) {
     int rows = image.rows;
     int cols = image.cols;
 
@@ -63,7 +69,8 @@ void sequential_downscale(const Mat& image, int kernel_size) {
         }
     }
 
-    save_image(img, "../seq_result.jpg");
+    String save_path = "../seq_result/" + to_string(kernel_size) + "_" + image_name;
+    save_image(img, save_path);
 }
 
 void save_image(const Mat& image, const string& path) {
@@ -90,7 +97,7 @@ Vec3b compute_avg_pixel(const Mat& image, int kernel_size, int row_index, int co
     return avg;
 }
 
-void cuda_downscale(const Mat& image, int kernel_size) {
+void cuda_downscale(const Mat& image, const string& image_name, int kernel_size) {
     std::vector<int> tmp_array;
     tmp_array.assign(image.data, image.data + image.total()*image.channels());
 
@@ -121,9 +128,9 @@ void cuda_downscale(const Mat& image, int kernel_size) {
     }
 
     cv::Mat downscaled_img = Mat(image.rows / kernel_size, image.cols / kernel_size, CV_8UC3, &res);
-    save_image(downscaled_img, "../cuda_result.jpg");
 
-
+    String save_path = "../cuda_result/" + to_string(kernel_size) + "_" + image_name;
+    save_image(downscaled_img, save_path);
 }
 
 __global__ void compute_avg_pixel_cuda(const int* img, int* res, int kernel_size, int img_dim) {
